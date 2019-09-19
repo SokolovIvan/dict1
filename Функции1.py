@@ -1,8 +1,0 @@
-#print(len(set(map(int, input().split()))))
-#print(len(set(str(open('input.txt').read()).split())))
-#print(min(list(filter(lambda x: x % 2 != 0, map(int, input().split())))))
-#print(any(set(map(lambda x: int(input()) == 0, range(int(input()))))))
-#print(set(map(lambda x: int(input()), range(int(input())))))
-#print(tuple(map(int, open('input.txt').read().split())))
-#print(reduce(lambda x,y: x * y, (map(lambda x: x**5, (tuple(map(int, open('input.txt').read().split())))))))
-#print(*map(lambda a, b: int(a != b), input().split(), input().split()))
