@@ -1,0 +1,511 @@
+import pandas as pd
+import numpy as np
+from scipy import stats as st
+df_games = pd.read_csv('/datasets/games.csv')
+df_rating = pd.read_csv('/datasets/rating.csv')
+df_rating
+
+rating_type	decryption
+0	E	Для всех
+1	M	От 17 лет
+2	T	Подросткам 13—19 лет
+3	E10+	Для всех старше 10 лет
+4	K-A	Для всех(до 1998 года)
+5	AO	Только для взрослых
+6	EC	Для детей младшего возраста
+7	RP	Рейтинг ожидается
+
+df_games.info()
+df_games.head()
+
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 16719 entries, 0 to 16718
+Data columns (total 12 columns):
+Unnamed: 0         16719 non-null int64
+Name               16717 non-null object
+Platform           16719 non-null object
+Year_of_Release    16450 non-null float64
+Genre              16717 non-null object
+NA_players         16719 non-null float64
+EU_players         16719 non-null float64
+RU_players         16719 non-null float64
+Other_players      16719 non-null float64
+Critic_Score       8137 non-null float64
+User_Score         10015 non-null object
+Rating             9950 non-null object
+dtypes: float64(6), int64(1), object(5)
+memory usage: 1.5+ MB
+
+Unnamed: 0	Name	Platform	Year_of_Release	Genre	NA_players	EU_players	RU_players	Other_players	Critic_Score	User_Score	Rating
+0	0	Wii Sports	Wii	2006.0	Sports	41.36	28.96	3.77	8.45	76.0	8	E
+1	1	Super Mario Bros.	NES	1985.0	Platform	29.08	3.58	6.81	0.77	NaN	NaN	NaN
+2	2	Mario Kart Wii	Wii	2008.0	Racing	15.68	12.76	3.79	3.29	82.0	8.3	E
+3	3	Wii Sports Resort	Wii	2009.0	Sports	15.61	10.93	3.28	2.95	80.0	8	E
+4	4	Pokemon Red/Pokemon Blue	GB	1996.0	Role-Playing	11.27	8.89	10.22	1.00	NaN	NaN	NaN
+Вводная информация
+Для исследования представлены данные о 16719 выпущенных играх с указанием платформы, года выпуска, жанра, рейтирнгов, и продаж по регионов. Поставлены задачи - провести исследование по списку, составить портрет пользователя по регионам, проверить гипотезы.
+
+Изменение названий столбцов
+Названия столбцов: NA_players, EU_players, RU_players, Other_players вводят в заблуждение и дают понять, что указано количество игроков. Необходимо переименовать их в понятные названия, где будет указана выручка в миллионах долларов.
+
+
+
+df_games = df_games.rename({'NA_players':'NA_mlnusd', 'EU_players':'EU_mlnusd', 
+                            'RU_players':'RU_mlnusd', 'Other_players':'Other_mlnusd'}, axis='columns')
+df_games.head()
+Unnamed: 0	Name	Platform	Year_of_Release	Genre	NA_mlnusd	EU_mlnusd	RU_mlnusd	Other_mlnusd	Critic_Score	User_Score	Rating
+0	0	Wii Sports	Wii	2006.0	Sports	41.36	28.96	3.77	8.45	76.0	8	E
+1	1	Super Mario Bros.	NES	1985.0	Platform	29.08	3.58	6.81	0.77	NaN	NaN	NaN
+2	2	Mario Kart Wii	Wii	2008.0	Racing	15.68	12.76	3.79	3.29	82.0	8.3	E
+3	3	Wii Sports Resort	Wii	2009.0	Sports	15.61	10.93	3.28	2.95	80.0	8	E
+4	4	Pokemon Red/Pokemon Blue	GB	1996.0	Role-Playing	11.27	8.89	10.22	1.00	NaN	NaN	NaN
+
+
+df_games['Year_of_Release'].unique()
+array([2006., 1985., 2008., 2009., 1996., 1989., 1984., 2005., 1999.,
+       2007., 2010., 2013., 2004., 1990., 1988., 2002., 2001., 2011.,
+       1998., 2015., 2012., 2014., 1992., 1997., 1993., 1994., 1982.,
+       2016., 2003., 1986., 2000.,   nan, 1995., 1991., 1981., 1987.,
+       1980., 1983., 2020., 2017.])
+Замена данных
+Данные в столбце Year_of_Release, имеют тип: float. Его целесообразно заменить на integer. Также в столбце есть пропущенные значения, и значение 2020 - что невозможно. 2020 год - это предположительно год выхода игры, из таблицы убираем, пропуски заполняем 1900-м годом, как заведомо невозможным значением. И меняем тип данных на integer, поскольку годы описывают целые числа, а для работы с целыми числами используется тип integer.
+
+df_games['Year_of_Release'] = df_games['Year_of_Release'].dropna().astype(pd.Int32Dtype())
+
+Данные в столбце User_Score, имеют тип object. Данный тип надо заменить на float. Значения nan и tbd заменяем на значение -1, потом меняем формат данных на float.
+
+df_games['User_Score'].unique()
+array(['8', nan, '8.3', '8.5', '6.6', '8.4', '8.6', '7.7', '6.3', '7.4',
+       '8.2', '9', '7.9', '8.1', '8.7', '7.1', '3.4', '5.3', '4.8', '3.2',
+       '8.9', '6.4', '7.8', '7.5', '2.6', '7.2', '9.2', '7', '7.3', '4.3',
+       '7.6', '5.7', '5', '9.1', '6.5', 'tbd', '8.8', '6.9', '9.4', '6.8',
+       '6.1', '6.7', '5.4', '4', '4.9', '4.5', '9.3', '6.2', '4.2', '6',
+       '3.7', '4.1', '5.8', '5.6', '5.5', '4.4', '4.6', '5.9', '3.9',
+       '3.1', '2.9', '5.2', '3.3', '4.7', '5.1', '3.5', '2.5', '1.9', '3',
+       '2.7', '2.2', '2', '9.5', '2.1', '3.6', '2.8', '1.8', '3.8', '0',
+       '1.6', '9.6', '2.4', '1.7', '1.1', '0.3', '1.5', '0.7', '1.2',
+       '2.3', '0.5', '1.3', '0.2', '0.6', '1.4', '0.9', '1', '9.7'],
+      dtype=object)
+df_games['User_Score'] = df_games['User_Score'].fillna(-1)
+df_games.loc[df_games['User_Score'] == 'tbd', 'User_Score'] = -1
+df_games['User_Score'] = df_games['User_Score'].astype(float)
+df_games.info()
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 16719 entries, 0 to 16718
+Data columns (total 12 columns):
+Unnamed: 0         16719 non-null int64
+Name               16717 non-null object
+Platform           16719 non-null object
+Year_of_Release    16450 non-null Int32
+Genre              16717 non-null object
+NA_mlnusd          16719 non-null float64
+EU_mlnusd          16719 non-null float64
+RU_mlnusd          16719 non-null float64
+Other_mlnusd       16719 non-null float64
+Critic_Score       8137 non-null float64
+User_Score         16719 non-null float64
+Rating             9950 non-null object
+dtypes: Int32(1), float64(6), int64(1), object(4)
+memory usage: 1.5+ MB
+Подсчитываем продажи во всех регионах
+
+df_games['world_mlnusd'] = df_games['NA_mlnusd'] + df_games['EU_mlnusd'] + df_games['RU_mlnusd'] + df_games['Other_mlnusd']
+Замена пропусков
+Смотрим, пропущенные значения в столбце "Name". Видим две игры, с пропущенными значениями жанров, без указания рейтингов, но с выручкой и 1993 годом выпуска. Как-либо определить имя игры, или её жанр не представляется возможным, в связи с этим пропуски в столбцах Name и Genre не заполняются.
+
+df_games['Name'] = df_games['Name'].fillna('No_Name')
+df_games_tmp = df_games.query('Name == "No_Name"')
+df_games_tmp
+Unnamed: 0	Name	Platform	Year_of_Release	Genre	NA_mlnusd	EU_mlnusd	RU_mlnusd	Other_mlnusd	Critic_Score	User_Score	Rating	world_mlnusd
+659	659	No_Name	GEN	1993	NaN	1.78	0.53	0.00	0.08	NaN	-1.0	NaN	2.39
+14246	14246	No_Name	GEN	1993	NaN	0.00	0.00	0.03	0.00	NaN	-1.0	NaN	0.03
+Смотрим, как очки критиков и пользователей влияют на мировые продажи.
+
+df_games_tmp = df_games.query('Critic_Score > 0')     
+df_games_tmp['Critic_Score'].corr(df_games_tmp['world_mlnusd'])
+0.24550668717736324
+Ожидаемо, что влияние слабое. Теперь то же самое делаем для User_Score.
+
+df_games_tmp = df_games.query('User_Score > 0')
+df_games_tmp['User_Score'].corr(df_games_tmp['world_mlnusd'])
+0.0883040988294907
+Заполнение пропусков
+Корреляция между рейтингами критиков и игроков с одной стороны, и мировыми продажами с другой - отсутствует. Соответственно, заполнить пропуски в столбцах Critic_Score и User_Score не представляется возможным. Заполнить пропуски по рейтингу тем более не возможно.
+
+Распределение по годам релиза
+Формируем таблицу, где указаны года релиза, количество игр (столбец Platform, а также общемировая выручка, и выручка на основных рынках (Северная Америка и Европа)). Строим график количество по выпуску количества игр по годам.
+
+df_games_by_year = df_games.query('Year_of_Release > 1900')
+df_games_by_year = df_games_by_year.groupby('Year_of_Release').agg({'Platform': 'count', 
+                                                                    'world_mlnusd':'sum', 'NA_mlnusd' : 'sum', 
+                                                                    'EU_mlnusd':'sum', 'RU_mlnusd':'sum'})
+df_games_by_year
+Platform	world_mlnusd	NA_mlnusd	EU_mlnusd	RU_mlnusd
+Year_of_Release					
+1980	9	11.38	10.59	0.67	0.00
+1981	46	35.68	33.40	1.96	0.00
+1982	36	28.88	26.92	1.65	0.00
+1983	17	16.80	7.76	0.80	8.10
+1984	14	50.35	33.28	2.10	14.27
+1985	14	53.95	33.73	4.74	14.56
+1986	21	37.08	12.50	2.84	19.81
+1987	16	21.70	8.46	1.41	11.63
+1988	15	47.21	23.87	6.59	15.76
+1989	17	73.45	45.15	8.44	18.36
+1990	16	49.37	25.46	7.63	14.88
+1991	41	32.23	12.76	3.95	14.78
+1992	43	76.16	33.89	11.71	28.91
+1993	62	48.41	16.90	5.18	25.36
+1994	121	79.23	28.16	14.88	33.99
+1995	219	88.12	24.83	14.90	45.75
+1996	263	199.15	86.76	47.26	57.44
+1997	289	201.07	94.75	48.32	48.87
+1998	379	256.31	128.36	66.90	50.04
+1999	338	251.11	126.06	62.67	52.34
+2000	350	201.66	94.50	52.77	42.77
+2001	482	331.46	173.98	94.89	39.86
+2002	829	394.97	216.19	109.75	41.76
+2003	775	357.54	193.61	103.81	34.20
+2004	762	418.68	222.51	107.28	41.65
+2005	939	457.82	242.15	121.11	54.27
+2006	1006	517.71	262.13	127.89	73.74
+2007	1197	604.75	309.89	157.82	60.29
+2008	1427	671.50	348.69	181.14	60.25
+2009	1426	658.82	335.55	187.94	61.89
+2010	1255	590.13	300.65	171.42	59.49
+2011	1136	507.58	238.79	162.97	53.07
+2012	653	355.84	153.26	114.59	51.80
+2013	544	361.24	153.65	121.55	47.69
+2014	581	331.53	132.27	122.74	39.69
+2015	606	267.98	106.86	96.72	34.09
+2016	502	129.94	44.93	51.22	19.31
+2017	3	0.06	0.00	0.00	0.06
+2020	1	0.29	0.27	0.00	0.00
+df_games_by_year['Platform'].plot()
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a2e68940>
+Распределение по годам релиза
+Максимальное количество игр, было выпущено в 2008, 2009 годах. График экспоненциально рос, потом было обвальное падение на уровень 500-650. Данные 2017 года резко выбиваются из графика. Считаю, что 2017 год включён не полностью, из расчётов его исключаю. Формирую график без 2017 года.
+
+df_games_by_year = df_games_by_year.query('Year_of_Release != 2017')
+df_games_by_year['Platform'].plot()
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a2b67e80>
+
+Выводы, распределение по годам релиза
+График количества игр в зависимости от года выглядит как экспонента, с медленным ростом до 1993 года, (62 игры в год) резким ростом до 2008-2009 года (пик - 1426), и падением в 2012-2016 на уровень (500 - 650) игр в год.
+
+Распределение игр с отзывами по годам релиза
+Для распределения игр с отзывами, сначала выбираем только игры с отзывами (заполненные поля в столбце Critic_Score или User_Score), затем убираем игры с неизвестным годом, и группируем по годам.
+
+Далее строим график, сопоставляем его с общим графиком выхода игр, и проверяем выводы корреляцией.
+
+
+df_games_feedback = df_games.query('Critic_Score > 0 or User_Score > 0')
+df_games_feedback.info()
+
+<class 'pandas.core.frame.DataFrame'>
+Int64Index: 8709 entries, 0 to 16709
+Data columns (total 13 columns):
+Unnamed: 0         8709 non-null int64
+Name               8709 non-null object
+Platform           8709 non-null object
+Year_of_Release    8551 non-null Int32
+Genre              8709 non-null object
+NA_mlnusd          8709 non-null float64
+EU_mlnusd          8709 non-null float64
+RU_mlnusd          8709 non-null float64
+Other_mlnusd       8709 non-null float64
+Critic_Score       8137 non-null float64
+User_Score         8709 non-null float64
+Rating             8610 non-null object
+world_mlnusd       8709 non-null float64
+dtypes: Int32(1), float64(7), int64(1), object(4)
+memory usage: 927.0+ KB
+
+df_games_feedback = df_games_feedback.query('Year_of_Release > 1900')
+df_games_feedback = df_games_feedback.groupby('Year_of_Release').agg({'Platform': 'count'})
+df_games_feedback                                                
+
+Platform
+Year_of_Release	
+1985	1
+1988	1
+1992	1
+1994	1
+1996	8
+1997	21
+1998	33
+1999	40
+2000	148
+2001	327
+2002	636
+2003	602
+2004	573
+2005	676
+2006	644
+2007	731
+2008	780
+2009	711
+2010	536
+2011	535
+2012	339
+2013	305
+2014	334
+2015	301
+2016	267
+df_games_feedback.plot()
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a2408a90>
+
+df_games_by_year['Platform'].corr(df_games_feedback['Platform'])
+0.93103792756663
+
+Выводы, распределение игр с отзывами по годам релиза
+График количества игр в зависимости от года, с отзывами, выглядит похоже на график выхода всех игр, но есть важные отличия.
+
+Фаза медленного роста была до 1999 года - (40 игр в год), резким ростом (2000 - 2002 год) до уровня (535-780 игр в год), с пиком 780 игр в 2008 году, и с дальнейшим резким падением на уровень (339 - 267 игр в год).
+
+То есть, мы также видим три фазы игрового рынка (медленный рост, быстрый рост, и падение), с пиком в 2008 году.
+
+Распределение продаж по каждому году
+Формируем таблицу, где указаны года релиза, количество игр (столбец Platform, а также общемировая выручка, и выручка на основных рынках (Северная Америка и Европа)). Строим график количество по выпуску количества игр по годам.
+
+df_games_by_year['world_mlnusd'].plot()
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a238f080>
+
+Выводы, о распределении выручки по годам
+График, показывающий распределение выручки по годам, выглядит очень похоже на график выхода игр. При этом, падение выручки после пика (2008-2009), идёт гораздо более сильное, особенно по 2015-2016 годам.
+
+До 1995 года рост выручки идёт медленный, и колеблется (до 15 миллионов в год). После 1995 года начинается быстрый экспоненциальный рост выручки, до пика 2008-2009 годов(181/188 миллионов соответственно), потом идёт падение идёт до уровня 2012-2015 (там идёт стабилизация по уровню (123/98 миллионов в год)), что соответствует графику выхода игр, а в 2016 году идёт обвальное падение.
+
+Возможно, данная ситуация вызвана тем, что игра выпущенная в одном году, продаётся потом несколько лет. Соответственно, продажи игр 2016 года и позднее не учтена в таблицах.
+
+df_games_by_platform = df_games.groupby('Platform').agg({'Platform': 'count', 'world_mlnusd':'sum', 'NA_mlnusd' : 'sum', 
+                                                         'EU_mlnusd':'sum', 'RU_mlnusd':'sum'})
+df_games_by_platform = df_games_by_platform.rename({'Platform': 'count'}, axis = 'columns')
+df_games_by_platform = df_games_by_platform.sort_values(by='count', ascending=False)
+df_games_by_platform
+count	world_mlnusd	NA_mlnusd	EU_mlnusd	RU_mlnusd
+Platform					
+PS2	2161	1255.77	583.84	339.29	139.20
+DS	2152	806.41	382.67	188.89	175.57
+PS3	1331	939.65	393.49	330.29	80.19
+Wii	1320	907.51	496.90	262.21	69.33
+X360	1262	971.42	602.47	270.76	12.43
+PSP	1209	294.05	109.17	66.68	76.78
+PS	1197	730.86	336.52	213.61	139.82
+PC	974	259.52	94.53	142.44	0.17
+XB	824	257.74	186.69	60.95	1.38
+GBA	822	317.85	187.54	75.25	47.33
+GC	556	198.93	133.46	38.71	21.58
+3DS	520	259.00	83.49	61.48	100.67
+PSV	432	54.09	12.58	13.12	21.93
+PS4	393	314.18	108.74	141.09	16.00
+N64	319	218.68	139.02	41.06	34.22
+XOne	247	159.32	93.12	51.59	0.34
+SNES	239	200.04	61.23	19.04	116.55
+SAT	173	33.59	0.72	0.54	32.26
+WiiU	147	82.19	38.10	25.13	13.01
+2600	133	96.98	90.60	5.47	0.00
+NES	98	251.05	125.94	21.15	98.65
+GB	98	255.46	114.32	47.82	85.12
+DC	52	15.95	5.43	1.69	8.56
+GEN	29	30.77	21.05	6.05	2.70
+NG	12	1.44	0.00	0.00	1.44
+SCD	6	1.86	1.00	0.36	0.45
+WS	6	1.42	0.00	0.00	1.42
+3DO	3	0.10	0.00	0.00	0.10
+TG16	2	0.16	0.00	0.00	0.16
+PCFX	1	0.03	0.00	0.00	0.03
+GG	1	0.04	0.00	0.00	0.04
+
+
+import matplotlib.pyplot as plt
+df_games_tmp = df_games['world_mlnusd']
+plt.boxplot(df_games_tmp)
+plt.show()
+
+Ящик с усами по глобальным продажам
+Строим график глобальных продаж, по играм. Из графика видно, что глобальные продажи у подавляющей части игр находятся около нуля, при этом, имеются многочисленные выбросы в диапозоне 0 - 22 миллиона долларов, немногочисленные выбросы в диапазоне 25 - 40 миллионов долларов, и единичный рекорд - 82 миллиона долларов.
+
+Исследуем наиболее массовый рынок игр более детально. Для исследования определим диапазон - от нуля до 75% плюс полтора стандартных отклонения.
+
+high_level = df_games['world_mlnusd'].describe().loc['75%'] + 1.5 * df_games['world_mlnusd'].describe().loc['std']
+high_level = round(high_level, 1)
+high_level
+for_bins = (high_level * 10).astype('int')
+df_games['world_mlnusd'].hist(bins=for_bins, range=(0, high_level))
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a22e77b8>
+
+Из графика видно, что большинство игр имеют выручку от нуля до 200 тысяч долларов, с резким падением выручки. Получается ещё два интересных диапазона (от 0 до 300 тысяч долларов) и от 3 миллионов до 22 миллионов.
+
+
+df_games['world_mlnusd'].hist(bins=30, range=(0, 0.3))
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a2286828>
+
+df_games['world_mlnusd'].hist(bins=19, range=(3, 22))
+<matplotlib.axes._subplots.AxesSubplot at 0x7fc6a2154128>
+
+Общий вывод по глобальным продажам
+График глобальных продаж выглядит как гипербола, с некоторыми особенностями:
+
+большая часть игр имеет выручку до 50 тысяч долларов (самая популярная выручка - 30 тысяч).
+далее падение идёт резко, и с уровня 17 до 22 миллионов долларов выходит на условное "плато", с единичным количеством игр.
+Комментарий от наставника 7 ✓
+Ты правильно заметил, что у нас присутствуют выбросы - игры с очень большой выручкой (числом копий).
+
+Но всё-таки говорить, что глобальные продажи находятся около нуля, не совсем корректно, когда речь идёт про миллионы долларов или копий :) На самом деле тебе не хватает тут ещё одного графика, который бы приближал ядро распределения, чтобы рассмотреть эту зону поподробнее и сделать более строгие выводы.
+
+Количество игр на плафтормах.
+Больше всего игр выпущено на платформе PS2 - 2161 игра, и платформе - DS - 2151 игра.
+
+df_games_by_genre = df_games.groupby('Genre').agg({'Platform': 'count', 'world_mlnusd':'sum', 'NA_mlnusd' : 'sum', 
+                                                   'EU_mlnusd':'sum', 'RU_mlnusd':'sum'})
+df_games_by_genre
+Platform	world_mlnusd	NA_mlnusd	EU_mlnusd	RU_mlnusd
+Genre					
+Action	3370	1744.18	879.01	519.13	161.44
+Adventure	1303	237.59	105.26	63.54	52.30
+Fighting	849	447.53	223.36	100.33	87.48
+Misc	1750	802.51	407.27	212.74	108.11
+Platform	888	827.77	445.50	200.35	130.83
+Puzzle	580	242.57	122.87	50.01	57.31
+Racing	1249	728.67	359.35	236.51	56.71
+Role-Playing	1500	934.61	330.81	188.71	355.46
+Shooter	1323	1052.45	592.24	317.34	38.76
+Simulation	874	390.26	182.19	113.52	63.80
+Sports	2348	1331.27	684.43	376.79	135.54
+Strategy	683	174.23	68.55	45.17	49.66
+Количество игр по жанрам
+Больше всего игр выпущено в жанре - Action (3370) игр, и Sports (2348) игр.
+
+df_games_by_userscore = df_games.query('User_Score > 0')
+print('Минимальная оценка пользователей:', df_games_by_userscore['User_Score'].min(), 
+      'Максимальная оценка пользователей:', df_games_by_userscore['User_Score'].max())
+Минимальная оценка пользователей: 0.2 Максимальная оценка пользователей: 9.7
+df_games_by_criticscore = df_games.query('Critic_Score > 0')
+print('Минимальная оценка критиков:', df_games_by_criticscore['Critic_Score'].min(), 
+      'Максимальная оценка критиков:', df_games_by_userscore['Critic_Score'].max())
+Минимальная оценка критиков: 13.0 Максимальная оценка критиков: 98.0
+Корреляция между оценками критиков и пользователей
+Для оценки корреляции между оценками критиков и оценками пользователей формируем список игр, где есть оценка и критиков и пользователей.
+
+df_games_user_critic = df_games_by_userscore.query('Critic_Score > 0')
+df_games_user_critic['User_Score'].corr(df_games_user_critic['Critic_Score'])
+0.5808778320767237
+Вывод о корреляции между оценками критиков и пользовательскими оценками
+Между оценками критиков и пользовательскими оценками имеется устойчивая взаимосвязь. Коэффициент корреляции 58%, что достаточно много.
+
+def top_five (data):
+    markets = ['NA_mlnusd', 'EU_mlnusd', 'RU_mlnusd']
+    for region in markets:
+        tmp = data.sort_values(region, ascending=False)
+        genre_pop = tmp.index.values[:5]
+        print (region, genre_pop[:5])
+print(df_games_by_genre.index.values[:5])
+['Action' 'Adventure' 'Fighting' 'Misc' 'Platform']
+
+
+top_five(df_games_by_genre)
+NA_mlnusd ['Action' 'Sports' 'Shooter' 'Platform' 'Misc']
+EU_mlnusd ['Action' 'Sports' 'Shooter' 'Racing' 'Misc']
+RU_mlnusd ['Role-Playing' 'Action' 'Sports' 'Platform' 'Misc']
+Вывод о предпочтительных жанрах
+Пользовательские предпочтения в разбивке по жанрам достаточно одинаковые по всем трём рынкам. Ключевыми жанрами в Северной Америке являются Action, Sports, Shooter, Platform, Misc. В Европе четвёртое место вместо Platform занимает Racing. А в России первое место занимает Role-Playing, а жанр - Shooter не входит в пятёрку.
+
+top_five(df_games_by_year)
+NA_mlnusd [2008 2009 2007 2010 2006]
+EU_mlnusd [2009 2008 2010 2011 2007]
+RU_mlnusd [2006 2009 2007 2008 2010]
+Вывод о максимально активных годах
+В Северной Америки и в России максимально высокие продажи были с 2006 по 2010 годы, в Европе - с 2007 по 2011 годы.
+
+top_five(df_games_by_platform)
+NA_mlnusd ['X360' 'PS2' 'Wii' 'PS3' 'DS']
+EU_mlnusd ['PS2' 'PS3' 'X360' 'Wii' 'PS']
+RU_mlnusd ['DS' 'PS' 'PS2' 'SNES' '3DS']
+Вывод о максимально популярных платформах для игр
+На всех рынках популярность платформ распределена абсолютно одинаково. PS2, DS, PS3, Wii, X360.
+
+Какой рейтинг встречается чаще всего
+Проверяем, есть ли игры с рейтингом K-A, выпущенные в 1998 году или позже.
+
+df_games_tmp1 = df_games.query('Rating == "K-A" and Year_of_Release >= 1998')
+df_games_tmp1
+Unnamed: 0	Name	Platform	Year_of_Release	Genre	NA_mlnusd	EU_mlnusd	RU_mlnusd	Other_mlnusd	Critic_Score	User_Score	Rating	world_mlnusd
+Таких игр нет, объединияем подобные рейтинги 'K-A' и 'E'.
+
+df_games['Rating'] = df_games['Rating'].fillna('No')
+df_games_tmp = df_games.query('Rating != "No"')
+df_games_tmp['Rating'] = df_games_tmp['Rating'].replace('K-A', 'E')
+df_games_by_rating = df_games_tmp.groupby('Rating').agg({'Rating': 'count', 'world_mlnusd':'sum', 'NA_mlnusd' : 'sum', 
+                                                         'EU_mlnusd':'sum', 'RU_mlnusd':'sum'})
+/opt/conda/lib/python3.7/site-packages/ipykernel_launcher.py:3: SettingWithCopyWarning: 
+A value is trying to be set on a copy of a slice from a DataFrame.
+Try using .loc[row_indexer,col_indexer] = value instead
+
+See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy
+  This is separate from the ipykernel package so we can avoid doing imports until
+top_five(df_games_by_rating)
+NA_mlnusd ['E' 'T' 'M' 'E10+' 'EC']
+EU_mlnusd ['E' 'M' 'T' 'E10+' 'AO']
+RU_mlnusd ['E' 'T' 'M' 'E10+' 'AO']
+Вывод о рейтингах
+В мире в целом, наиболее популярными являются игры для всех, а также игры для детей от десяти лет и старше.
+
+На рынках Европы и России наиболее популярными являются игры со следующими рейтингами: E, M, T, E10+, AO. Рынок Северной Америки почти такой же: E, T, M, E10+, EC.
+
+Единственным существенным отличием от рынка России и Европы, является то, что игры для взрослых, заменены на игры для детей младшего возраста.
+
+
+Проверка гипотез
+Для проверки гипотез формируем таблицу, где есть данные о пользовательских рейтингах платформ PS2 и PS3, и пользовательский рейтинг жанров Action и Sports. В таблицы включаем только игры, где пользовательский рейтинг больше 0, и выпущенные для определённых платформ (соответствующие определённым жанрам).
+
+Считаем средний рейтинг по годам, и потом на основании среднего рейтинга по годам опровергаем, или не опровергаем выдвинутые гипотезы.
+
+df_platform = df_games.query('User_Score > 0')
+df_platform_ps2 = df_platform.query('Platform == "PS2"')
+df_platform_ps3 = df_platform.query('Platform == "PS3"')
+df_platform_ps2 = df_platform_ps2.groupby('Year_of_Release').agg({'User_Score': 'mean'})
+df_platform_ps3 = df_platform_ps3.groupby('Year_of_Release').agg({'User_Score': 'mean'})
+results = st.ttest_ind(
+    df_platform_ps2,
+    df_platform_ps3,
+    equal_var=False
+)
+print(results.pvalue)
+[0.00663142]
+Комментарий от наставника 10 ✓
+Так как мы явно не проверяли, совпадают ли дисперсии у наших генеральных совокупностей, то лучше тут всё-таки ставить equal_var=False.
+
+Пользовательский рейтинг платформ PS2 и PS3 ✓
+Нулевая гипотеза звучит так: Пользовательский рейтинг платформ PS2 и PS3 совпадает. Соответственно, альтернативная гипотеза звучит так: Пользовательский рейтинг платформ PS2 и PS3 различается.
+
+Поскольку значение pvalue, являтся низким (0,004), то нулевая гипотеза опровергнута. Средний пользовательский рейтинг платформ PS2 и PS3 отличается
+
+df_genre_Action = df_platform.query('Genre == "Action"')
+df_genre_Sports = df_platform.query('Genre == "Sports"')
+df_genre_Action = df_genre_Action.groupby('Year_of_Release').agg({'User_Score': 'mean'})
+df_genre_Sports = df_genre_Sports.groupby('Year_of_Release').agg({'User_Score': 'mean'})
+results = st.ttest_ind(
+    df_genre_Action,
+    df_genre_Sports
+    
+)
+print(results.pvalue)
+[0.23127074]
+Пользовательский рейтинг жанров Action и Sports
+Нулевая гипотеза звучит так: Пользовательский рейтинг жанров Action и Sports совпадает. Соответственно, альтернативная гипотеза звучит так: Пользовательский рейтинг жанров Action и Sports различается.
+
+Поскольку значение pvalue, являтся достаточно высоким (0,23), то нулевая гипотеза не опровергнута. Средний пользовательский рейтинг рейтинг жанров Action и Sports совпадает
+
+Общий вывод:
+Развитие игровой индустрии (количество игр и общая выручка) описывается по экспоненте, с последующим падением, где медленный рост заканчивается 1995 годом, далее идёт быстрый рост, до пика 2008 - 2009, годов, далее идёт падение с некоторой стабилизацией.
+
+В игровой индустрии основную выручку формирует несколько лидеров (как по играм, так и по платформам).
+
+Между оценками пользователей и критиков существует явно выраженная, но не мощная корреляция (0.58)
+
+Три представленных для исследования рынка (Северная Америка, Европа и Россия), имеют почти одинаковые игровые предпочтения. При этом Россия похожа на Северную Америку, а не на Европу.
+
+Средний пользовательский рейтинг платформ PS2 и PS3 отличается.
+
+Средний пользовательский рейтинг рейтинг жанров Action и Sports совпадает.
